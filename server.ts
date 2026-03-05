@@ -21,7 +21,8 @@ const __dirname = path.dirname(__filename);
 let db: any;
 try {
   db = new Database("tournament.db");
-  console.log("Database connected.");
+  db.pragma('journal_mode = WAL');
+  console.log("Database connected with WAL mode.");
 } catch (e) {
   console.error("CRITICAL: Failed to connect to database:", e);
   process.exit(1);
@@ -49,6 +50,7 @@ db.exec(`
     location TEXT,
     status TEXT DEFAULT 'scheduled',
     is_final INTEGER DEFAULT 0,
+    is_third_place INTEGER DEFAULT 0,
     FOREIGN KEY(team_a_id) REFERENCES teams(id),
     FOREIGN KEY(team_b_id) REFERENCES teams(id)
   );
@@ -84,6 +86,16 @@ try {
 try {
   db.prepare("ALTER TABLE matches ADD COLUMN is_final INTEGER DEFAULT 0").run();
   console.log("Added is_final column to matches table");
+} catch (e: any) {
+  if (!e.message.includes("duplicate column name")) {
+    console.error("Migration error:", e.message);
+  }
+}
+
+// Migration: Ensure is_third_place exists in matches table
+try {
+  db.prepare("ALTER TABLE matches ADD COLUMN is_third_place INTEGER DEFAULT 0").run();
+  console.log("Added is_third_place column to matches table");
 } catch (e: any) {
   if (!e.message.includes("duplicate column name")) {
     console.error("Migration error:", e.message);
@@ -182,8 +194,8 @@ async function startServer() {
   });
 
   app.post("/api/matches", (req, res) => {
-    const { category, team_a_id, team_b_id, date, time, location, is_final } = req.body;
-    const info = db.prepare("INSERT INTO matches (category, team_a_id, team_b_id, date, time, location, is_final) VALUES (?, ?, ?, ?, ?, ?, ?)").run(category, team_a_id, team_b_id, date, time, location, is_final ? 1 : 0);
+    const { category, team_a_id, team_b_id, date, time, location, is_final, is_third_place } = req.body;
+    const info = db.prepare("INSERT INTO matches (category, team_a_id, team_b_id, date, time, location, is_final, is_third_place) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(category, team_a_id, team_b_id, date, time, location, is_final ? 1 : 0, is_third_place ? 1 : 0);
     
     // Log history
     db.prepare("INSERT INTO history (action_type, entity_type, entity_id, previous_data) VALUES (?, ?, ?, ?)").run('CREATE', 'MATCH', info.lastInsertRowid, null);
@@ -193,7 +205,7 @@ async function startServer() {
   });
 
   app.patch("/api/matches/:id", (req, res) => {
-    const { score_a, score_b, status, team_a_id, team_b_id, date, time, location, is_final } = req.body;
+    const { score_a, score_b, status, team_a_id, team_b_id, date, time, location, is_final, is_third_place } = req.body;
     const previous = db.prepare("SELECT * FROM matches WHERE id = ?").get(req.params.id);
     
     // Build update query dynamically or just update all
@@ -207,9 +219,10 @@ async function startServer() {
           date = COALESCE(?, date),
           time = COALESCE(?, time),
           location = COALESCE(?, location),
-          is_final = COALESCE(?, is_final)
+          is_final = COALESCE(?, is_final),
+          is_third_place = COALESCE(?, is_third_place)
       WHERE id = ?
-    `).run(score_a, score_b, status, team_a_id, team_b_id, date, time, location, is_final !== undefined ? (is_final ? 1 : 0) : null, req.params.id);
+    `).run(score_a, score_b, status, team_a_id, team_b_id, date, time, location, is_final !== undefined ? (is_final ? 1 : 0) : null, is_third_place !== undefined ? (is_third_place ? 1 : 0) : null, req.params.id);
     
     // Log history
     db.prepare("INSERT INTO history (action_type, entity_type, entity_id, previous_data) VALUES (?, ?, ?, ?)").run('UPDATE', 'MATCH', req.params.id, JSON.stringify(previous));
@@ -245,14 +258,14 @@ async function startServer() {
           db.prepare("UPDATE teams SET name = ?, category = ?, group_name = ?, logo_url = ? WHERE id = ?").run(data.name, data.category, data.group_name, data.logo_url, entity_id);
         }
         if (entity_type === 'MATCH') {
-          db.prepare("UPDATE matches SET category = ?, team_a_id = ?, team_b_id = ?, score_a = ?, score_b = ?, date = ?, time = ?, location = ?, status = ?, is_final = ? WHERE id = ?").run(data.category, data.team_a_id, data.team_b_id, data.score_a, data.score_b, data.date, data.time, data.location, data.status, data.is_final, entity_id);
+          db.prepare("UPDATE matches SET category = ?, team_a_id = ?, team_b_id = ?, score_a = ?, score_b = ?, date = ?, time = ?, location = ?, status = ?, is_final = ?, is_third_place = ? WHERE id = ?").run(data.category, data.team_a_id, data.team_b_id, data.score_a, data.score_b, data.date, data.time, data.location, data.status, data.is_final, data.is_third_place, entity_id);
         }
       } else if (action_type === 'DELETE') {
         if (entity_type === 'TEAM') {
           db.prepare("INSERT INTO teams (id, name, category, group_name, logo_url) VALUES (?, ?, ?, ?, ?)").run(data.id, data.name, data.category, data.group_name, data.logo_url);
         }
         if (entity_type === 'MATCH') {
-          db.prepare("INSERT INTO matches (id, category, team_a_id, team_b_id, score_a, score_b, date, time, location, status, is_final) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(data.id, data.category, data.team_a_id, data.team_b_id, data.score_a, data.score_b, data.date, data.time, data.location, data.status, data.is_final);
+          db.prepare("INSERT INTO matches (id, category, team_a_id, team_b_id, score_a, score_b, date, time, location, status, is_final, is_third_place) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(data.id, data.category, data.team_a_id, data.team_b_id, data.score_a, data.score_b, data.date, data.time, data.location, data.status, data.is_final, data.is_third_place);
         }
       }
 

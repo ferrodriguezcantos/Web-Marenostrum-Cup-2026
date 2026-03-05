@@ -42,6 +42,7 @@ interface Match {
   location: string;
   status: 'scheduled' | 'finished';
   is_final?: number;
+  is_third_place?: number;
 }
 
 const CATEGORIES = [
@@ -79,6 +80,7 @@ export default function App() {
   const [newMatchTime, setNewMatchTime] = useState('10:00');
   const [newMatchLocation, setNewMatchLocation] = useState('');
   const [isFinalMatch, setIsFinalMatch] = useState(false);
+  const [isThirdPlaceMatch, setIsThirdPlaceMatch] = useState(false);
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -246,13 +248,15 @@ export default function App() {
         date: newMatchDate,
         time: newMatchTime,
         location: newMatchLocation,
-        is_final: isFinalMatch
+        is_final: isFinalMatch,
+        is_third_place: isThirdPlaceMatch
       })
     });
     if (res.ok) {
       setNewMatchTeamA('');
       setNewMatchTeamB('');
       setIsFinalMatch(false);
+      setIsThirdPlaceMatch(false);
       fetchData();
     }
   };
@@ -271,7 +275,8 @@ export default function App() {
         score_a: editingMatch.score_a,
         score_b: editingMatch.score_b,
         status: editingMatch.status,
-        is_final: editingMatch.is_final
+        is_final: editingMatch.is_final,
+        is_third_place: editingMatch.is_third_place
       })
     });
     if (res.ok) {
@@ -315,12 +320,17 @@ export default function App() {
   );
 
   const regularMatches = useMemo(() => 
-    filteredMatches.filter(m => !m.is_final),
+    filteredMatches.filter(m => !m.is_final && !m.is_third_place),
     [filteredMatches]
   );
 
   const finalMatches = useMemo(() => 
     filteredMatches.filter(m => m.is_final),
+    [filteredMatches]
+  );
+
+  const thirdPlaceMatches = useMemo(() => 
+    filteredMatches.filter(m => m.is_third_place),
     [filteredMatches]
   );
 
@@ -534,15 +544,33 @@ export default function App() {
                           onChange={e => setNewMatchLocation(e.target.value)}
                           className="p-3 rounded-xl border border-slate-200 bg-slate-50"
                         />
-                        <div className="flex items-center gap-2 p-3">
-                          <input 
-                            type="checkbox" 
-                            id="isFinal"
-                            checked={isFinalMatch}
-                            onChange={e => setIsFinalMatch(e.target.checked)}
-                            className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                          <label htmlFor="isFinal" className="text-sm font-bold text-slate-700">¿Es una Final?</label>
+                        <div className="flex items-center gap-4 p-3 col-span-1 md:col-span-2">
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="checkbox" 
+                              id="isFinal"
+                              checked={isFinalMatch}
+                              onChange={e => {
+                                setIsFinalMatch(e.target.checked);
+                                if (e.target.checked) setIsThirdPlaceMatch(false);
+                              }}
+                              className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <label htmlFor="isFinal" className="text-sm font-bold text-slate-700">¿Es una Final?</label>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="checkbox" 
+                              id="isThirdPlace"
+                              checked={isThirdPlaceMatch}
+                              onChange={e => {
+                                setIsThirdPlaceMatch(e.target.checked);
+                                if (e.target.checked) setIsFinalMatch(false);
+                              }}
+                              className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <label htmlFor="isThirdPlace" className="text-sm font-bold text-slate-700">¿Es 3er/4to Puesto?</label>
+                          </div>
                         </div>
                       </div>
                       <button 
@@ -597,6 +625,28 @@ export default function App() {
                                 onChange={e => setEditingMatch({...editingMatch, location: e.target.value})}
                                 className="p-2 rounded-lg border border-slate-200 col-span-2"
                               />
+                              <div className="flex items-center gap-4 col-span-2 p-1">
+                                <div className="flex items-center gap-2">
+                                  <input 
+                                    type="checkbox" 
+                                    id={`edit-final-${editingMatch.id}`}
+                                    checked={!!editingMatch.is_final}
+                                    onChange={e => setEditingMatch({...editingMatch, is_final: e.target.checked ? 1 : 0, is_third_place: 0})}
+                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600"
+                                  />
+                                  <label htmlFor={`edit-final-${editingMatch.id}`} className="text-xs font-bold text-slate-600">Final</label>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <input 
+                                    type="checkbox" 
+                                    id={`edit-third-${editingMatch.id}`}
+                                    checked={!!editingMatch.is_third_place}
+                                    onChange={e => setEditingMatch({...editingMatch, is_third_place: e.target.checked ? 1 : 0, is_final: 0})}
+                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600"
+                                  />
+                                  <label htmlFor={`edit-third-${editingMatch.id}`} className="text-xs font-bold text-slate-600">3er/4to</label>
+                                </div>
+                              </div>
                             </div>
                             <div className="flex gap-2">
                               <button onClick={updateMatch} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold">Guardar</button>
@@ -830,98 +880,192 @@ export default function App() {
               )}
 
               {activeSection === 'Final' && (
-                <div className="space-y-8">
-                  <div className="text-center py-8">
-                    <Trophy className="mx-auto text-amber-400 mb-4" size={64} />
-                    <h2 className="text-3xl font-display font-black text-slate-900 uppercase tracking-tight">Gran Final</h2>
-                    <p className="text-slate-500 font-medium">{activeCategory}</p>
-                  </div>
+                <div className="space-y-12">
+                  {/* Gran Final Section */}
+                  <div className="space-y-8">
+                    <div className="text-center py-8">
+                      <Trophy className="mx-auto text-amber-400 mb-4" size={64} />
+                      <h2 className="text-3xl font-display font-black text-slate-900 uppercase tracking-tight">Gran Final</h2>
+                      <p className="text-slate-500 font-medium">{activeCategory}</p>
+                    </div>
 
-                  <div className="space-y-6">
-                    {finalMatches.length === 0 ? (
-                      <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
-                        <p className="text-slate-400 font-medium">La final aún no ha sido programada</p>
-                      </div>
-                    ) : (
-                      finalMatches.map(match => (
-                        <div key={match.id} className="bg-gradient-to-br from-indigo-600 to-violet-700 p-8 rounded-[2rem] shadow-xl shadow-indigo-200 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 p-4 opacity-10">
-                            <Trophy size={120} />
-                          </div>
-                          
-                          <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-8">
-                            <div className="flex-1 flex flex-col items-center gap-4 text-center">
-                              <div className="w-24 h-24 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center overflow-hidden border border-white/30 shadow-lg">
-                                {match.team_a_logo ? (
-                                  <img src={match.team_a_logo} alt={match.team_a_name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-                                ) : (
-                                  <Users className="text-white/60" size={40} />
-                                )}
-                              </div>
-                              <span className="text-2xl font-black text-white uppercase tracking-tight">{match.team_a_name}</span>
+                    <div className="space-y-6">
+                      {finalMatches.length === 0 ? (
+                        <div className="text-center py-10 bg-white rounded-3xl border border-dashed border-slate-200">
+                          <p className="text-slate-400 font-medium">La final aún no ha sido programada</p>
+                        </div>
+                      ) : (
+                        finalMatches.map(match => (
+                          <div key={match.id} className="bg-gradient-to-br from-indigo-600 to-violet-700 p-8 rounded-[2rem] shadow-xl shadow-indigo-200 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10">
+                              <Trophy size={120} />
                             </div>
                             
-                            <div className="flex flex-col items-center gap-4">
-                              <div className="flex items-center gap-6">
-                                {isAdmin ? (
-                                  <>
-                                    <input 
-                                      type="number" 
-                                      value={match.score_a} 
-                                      onChange={e => updateScore(match.id, parseInt(e.target.value), match.score_b, 'finished')}
-                                      className="w-20 h-20 text-center text-4xl font-black bg-white/10 text-white rounded-3xl border-2 border-white/20 focus:border-white outline-none"
-                                    />
-                                    <span className="text-3xl font-black text-white/40">VS</span>
-                                    <input 
-                                      type="number" 
-                                      value={match.score_b} 
-                                      onChange={e => updateScore(match.id, match.score_a, parseInt(e.target.value), 'finished')}
-                                      className="w-20 h-20 text-center text-4xl font-black bg-white/10 text-white rounded-3xl border-2 border-white/20 focus:border-white outline-none"
-                                    />
-                                  </>
-                                ) : (
-                                  <div className="flex items-center gap-6">
-                                    <span className="text-6xl font-black text-white">
-                                      {match.status === 'finished' ? match.score_a : '-'}
-                                    </span>
-                                    <div className="px-4 py-1 bg-white/20 rounded-full backdrop-blur-sm">
-                                      <span className="text-sm font-black text-white uppercase tracking-widest">Final</span>
+                            <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-8">
+                              <div className="flex-1 flex flex-col items-center gap-4 text-center">
+                                <div className="w-24 h-24 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center overflow-hidden border border-white/30 shadow-lg">
+                                  {match.team_a_logo ? (
+                                    <img src={match.team_a_logo} alt={match.team_a_name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                  ) : (
+                                    <Users className="text-white/60" size={40} />
+                                  )}
+                                </div>
+                                <span className="text-2xl font-black text-white uppercase tracking-tight">{match.team_a_name}</span>
+                              </div>
+                              
+                              <div className="flex flex-col items-center gap-4">
+                                <div className="flex items-center gap-6">
+                                  {isAdmin ? (
+                                    <>
+                                      <input 
+                                        type="number" 
+                                        value={match.score_a} 
+                                        onChange={e => updateScore(match.id, parseInt(e.target.value), match.score_b, 'finished')}
+                                        className="w-20 h-20 text-center text-4xl font-black bg-white/10 text-white rounded-3xl border-2 border-white/20 focus:border-white outline-none"
+                                      />
+                                      <span className="text-3xl font-black text-white/40">VS</span>
+                                      <input 
+                                        type="number" 
+                                        value={match.score_b} 
+                                        onChange={e => updateScore(match.id, match.score_a, parseInt(e.target.value), 'finished')}
+                                        className="w-20 h-20 text-center text-4xl font-black bg-white/10 text-white rounded-3xl border-2 border-white/20 focus:border-white outline-none"
+                                      />
+                                    </>
+                                  ) : (
+                                    <div className="flex items-center gap-6">
+                                      <span className="text-6xl font-black text-white">
+                                        {match.status === 'finished' ? match.score_a : '-'}
+                                      </span>
+                                      <div className="px-4 py-1 bg-white/20 rounded-full backdrop-blur-sm">
+                                        <span className="text-sm font-black text-white uppercase tracking-widest">Final</span>
+                                      </div>
+                                      <span className="text-6xl font-black text-white">
+                                        {match.status === 'finished' ? match.score_b : '-'}
+                                      </span>
                                     </div>
-                                    <span className="text-6xl font-black text-white">
-                                      {match.status === 'finished' ? match.score_b : '-'}
-                                    </span>
-                                  </div>
-                                )}
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-center gap-1 text-white/70 font-bold uppercase tracking-widest text-sm">
+                                  <span className="flex items-center gap-2"><Clock size={16} /> {match.time}</span>
+                                  <span className="flex items-center gap-2"><MapPin size={16} /> {match.location || 'Pabellón Principal'}</span>
+                                </div>
                               </div>
-                              <div className="flex flex-col items-center gap-1 text-white/70 font-bold uppercase tracking-widest text-sm">
-                                <span className="flex items-center gap-2"><Clock size={16} /> {match.time}</span>
-                                <span className="flex items-center gap-2"><MapPin size={16} /> {match.location || 'Pabellón Principal'}</span>
+
+                              <div className="flex-1 flex flex-col items-center gap-4 text-center">
+                                <div className="w-24 h-24 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center overflow-hidden border border-white/30 shadow-lg">
+                                  {match.team_b_logo ? (
+                                    <img src={match.team_b_logo} alt={match.team_b_name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                  ) : (
+                                    <Users className="text-white/60" size={40} />
+                                  )}
+                                </div>
+                                <span className="text-2xl font-black text-white uppercase tracking-tight">{match.team_b_name}</span>
                               </div>
                             </div>
 
-                            <div className="flex-1 flex flex-col items-center gap-4 text-center">
-                              <div className="w-24 h-24 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center overflow-hidden border border-white/30 shadow-lg">
-                                {match.team_b_logo ? (
-                                  <img src={match.team_b_logo} alt={match.team_b_name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-                                ) : (
-                                  <Users className="text-white/60" size={40} />
-                                )}
-                              </div>
-                              <span className="text-2xl font-black text-white uppercase tracking-tight">{match.team_b_name}</span>
-                            </div>
+                            {isAdmin && (
+                              <button 
+                                onClick={() => deleteMatch(match.id)}
+                                className="mt-8 w-full flex items-center justify-center gap-2 py-3 bg-white/10 text-white/60 hover:bg-white/20 rounded-2xl transition-all font-bold"
+                              >
+                                <Trash2 size={18} /> Eliminar Final
+                              </button>
+                            )}
                           </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
 
-                          {isAdmin && (
-                            <button 
-                              onClick={() => deleteMatch(match.id)}
-                              className="mt-8 w-full flex items-center justify-center gap-2 py-3 bg-white/10 text-white/60 hover:bg-white/20 rounded-2xl transition-all font-bold"
-                            >
-                              <Trash2 size={18} /> Eliminar Final
-                            </button>
-                          )}
+                  {/* 3rd/4th Place Section */}
+                  <div className="space-y-8">
+                    <div className="text-center py-8">
+                      <Users className="mx-auto text-indigo-400 mb-4" size={48} />
+                      <h2 className="text-2xl font-display font-black text-slate-900 uppercase tracking-tight">3er y 4to Puesto</h2>
+                    </div>
+
+                    <div className="space-y-6">
+                      {thirdPlaceMatches.length === 0 ? (
+                        <div className="text-center py-10 bg-white rounded-3xl border border-dashed border-slate-200">
+                          <p className="text-slate-400 font-medium">El partido por el 3er puesto aún no ha sido programado</p>
                         </div>
-                      ))
-                    )}
+                      ) : (
+                        thirdPlaceMatches.map(match => (
+                          <div key={match.id} className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden">
+                            <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-8">
+                              <div className="flex-1 flex flex-col items-center gap-4 text-center">
+                                <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
+                                  {match.team_a_logo ? (
+                                    <img src={match.team_a_logo} alt={match.team_a_name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                  ) : (
+                                    <Users className="text-slate-300" size={32} />
+                                  )}
+                                </div>
+                                <span className="text-xl font-bold text-slate-800 uppercase tracking-tight">{match.team_a_name}</span>
+                              </div>
+                              
+                              <div className="flex flex-col items-center gap-4">
+                                <div className="flex items-center gap-6">
+                                  {isAdmin ? (
+                                    <>
+                                      <input 
+                                        type="number" 
+                                        value={match.score_a} 
+                                        onChange={e => updateScore(match.id, parseInt(e.target.value), match.score_b, 'finished')}
+                                        className="w-16 h-16 text-center text-3xl font-black bg-slate-50 text-slate-900 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 outline-none"
+                                      />
+                                      <span className="text-2xl font-black text-slate-200">VS</span>
+                                      <input 
+                                        type="number" 
+                                        value={match.score_b} 
+                                        onChange={e => updateScore(match.id, match.score_a, parseInt(e.target.value), 'finished')}
+                                        className="w-16 h-16 text-center text-3xl font-black bg-slate-50 text-slate-900 rounded-2xl border-2 border-slate-100 focus:border-indigo-500 outline-none"
+                                      />
+                                    </>
+                                  ) : (
+                                    <div className="flex items-center gap-6">
+                                      <span className="text-5xl font-black text-slate-900">
+                                        {match.status === 'finished' ? match.score_a : '-'}
+                                      </span>
+                                      <div className="px-4 py-1 bg-slate-100 rounded-full">
+                                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">3º Puesto</span>
+                                      </div>
+                                      <span className="text-5xl font-black text-slate-900">
+                                        {match.status === 'finished' ? match.score_b : '-'}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-center gap-1 text-slate-400 font-bold uppercase tracking-widest text-xs">
+                                  <span className="flex items-center gap-2"><Clock size={14} /> {match.time}</span>
+                                  <span className="flex items-center gap-2"><MapPin size={14} /> {match.location || 'Pabellón Principal'}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex-1 flex flex-col items-center gap-4 text-center">
+                                <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
+                                  {match.team_b_logo ? (
+                                    <img src={match.team_b_logo} alt={match.team_b_name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                  ) : (
+                                    <Users className="text-slate-300" size={32} />
+                                  )}
+                                </div>
+                                <span className="text-xl font-bold text-slate-800 uppercase tracking-tight">{match.team_b_name}</span>
+                              </div>
+                            </div>
+
+                            {isAdmin && (
+                              <button 
+                                onClick={() => deleteMatch(match.id)}
+                                className="mt-8 w-full flex items-center justify-center gap-2 py-3 bg-slate-50 text-slate-400 hover:bg-slate-100 rounded-2xl transition-all font-bold"
+                              >
+                                <Trash2 size={18} /> Eliminar Partido
+                              </button>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
